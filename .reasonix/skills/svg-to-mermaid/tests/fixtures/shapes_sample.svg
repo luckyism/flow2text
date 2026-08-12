@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="500" height="300">
+  <rect x="20" y="30" width="120" height="40" rx="4"/>
+  <ellipse cx="250" cy="50" rx="60" ry="25"/>
+  <polygon points="400,70 480,50 480,90 400,70"/>
+  <g transform="translate(0, 100)">
+    <rect x="20" y="30" width="100" height="40"/>
+  </g>
+</svg>

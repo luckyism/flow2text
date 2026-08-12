@@ -29,5 +29,25 @@ class TestExtractTexts(unittest.TestCase):
         self.assertEqual(texts["处理步骤"]["y"], 50)  # 30 + 20
 
 
+class TestExtractShapes(unittest.TestCase):
+    def test_shape_types_and_centers(self):
+        root = svg2struct.parse_svg(load("shapes_sample.svg"))
+        shapes = {s["id"]: s for s in root["nodes"]
+                  if s["type"] != "text"}
+        types = sorted(s["type"] for s in shapes.values())
+        self.assertEqual(types, ["diamond", "ellipse", "rect", "rect"])
+        rect1 = next(s for s in shapes.values() if s["cx"] == 80 and s["cy"] == 50)
+        self.assertEqual(rect1["type"], "rect")
+        self.assertEqual(rect1["w"], 120)
+        self.assertEqual(rect1["h"], 40)
+        # transform translate(0,100) 生效:第二个 rect 中心 y = 30+100+20 = 150
+        rect2 = next(s for s in shapes.values() if s["cx"] == 70)
+        self.assertEqual(rect2["cy"], 150)
+        # polygon 4 点 → diamond
+        dia = next(s for s in shapes.values() if s["type"] == "diamond")
+        self.assertEqual(dia["cx"], 440)
+        self.assertEqual(dia["cy"], 70)
+
+
 if __name__ == "__main__":
     unittest.main()

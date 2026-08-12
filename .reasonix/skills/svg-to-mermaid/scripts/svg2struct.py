@@ -95,9 +95,61 @@ def extract_texts(root):
     return texts
 
 
+def _shape_center(x, y, w, h):
+    return x + w / 2.0, y + h / 2.0
+
+
+def extract_shapes(root):
+    parent_map = _parent_map(root)
+    shapes = []
+    for i, el in enumerate(root.iter()):
+        tag = _tag(el.tag)
+        transforms = _transforms(el, parent_map)
+        if tag == "rect":
+            x = float(el.get("x", "0") or 0)
+            y = float(el.get("y", "0") or 0)
+            w = float(el.get("width", "0") or 0)
+            h = float(el.get("height", "0") or 0)
+            cx, cy = _shape_center(x, y, w, h)
+            cx, cy = _apply_transforms(cx, cy, transforms)
+            # 大矩形(泳道/分区容器,如 draw.io swimlane)不作为流程节点
+            kind = "container" if w > 150 and h > 150 else "rect"
+            shapes.append({"id": f"s{i}", "type": kind,
+                           "cx": cx, "cy": cy, "w": w, "h": h})
+        elif tag == "ellipse":
+            cx = float(el.get("cx", "0") or 0)
+            cy = float(el.get("cy", "0") or 0)
+            rx = float(el.get("rx", "0") or 0)
+            ry = float(el.get("ry", "0") or 0)
+            cx, cy = _apply_transforms(cx, cy, transforms)
+            shapes.append({"id": f"s{i}", "type": "ellipse",
+                           "cx": cx, "cy": cy, "w": rx * 2, "h": ry * 2})
+        elif tag == "circle":
+            cx = float(el.get("cx", "0") or 0)
+            cy = float(el.get("cy", "0") or 0)
+            r = float(el.get("r", "0") or 0)
+            cx, cy = _apply_transforms(cx, cy, transforms)
+            shapes.append({"id": f"s{i}", "type": "ellipse",
+                           "cx": cx, "cy": cy, "w": r * 2, "h": r * 2})
+        elif tag == "polygon":
+            pts = el.get("points", "")
+            coords = [float(v) for v in pts.replace(",", " ").split() if v]
+            if len(coords) >= 6:
+                xs = coords[0::2]
+                ys = coords[1::2]
+                cx = sum(xs) / len(xs)
+                cy = sum(ys) / len(ys)
+                cx, cy = _apply_transforms(cx, cy, transforms)
+                kind = "diamond" if len(xs) == 4 else "polygon"
+                shapes.append({"id": f"s{i}", "type": kind,
+                               "cx": cx, "cy": cy,
+                               "w": max(xs) - min(xs), "h": max(ys) - min(ys)})
+    return shapes
+
+
 def parse_svg(xml_text):
     root = ET.fromstring(xml_text)
-    return {"nodes": extract_texts(root), "edges": []}
+    return {"nodes": extract_texts(root) + extract_shapes(root), "edges": []}
 
 
 def main():
