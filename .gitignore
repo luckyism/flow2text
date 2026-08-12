@@ -1,0 +1,10 @@
+# macOS
+.DS_Store
+
+# Python
+__pycache__/
+*.pyc
+
+# Reasonix 运行时
+.reasonix/attachments/
+.reasonix/.DS_Store
