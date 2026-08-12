@@ -61,6 +61,16 @@ def _apply_transforms(x, y, transforms):
     return x, y
 
 
+def _in_defs(el, parent_map):
+    """判断元素是否位于 <defs> 内(模板元素,不可见,须跳过)。"""
+    cur = parent_map.get(el)
+    while cur is not None:
+        if _tag(cur.tag) == "defs":
+            return True
+        cur = parent_map.get(cur)
+    return False
+
+
 def extract_texts(root):
     """提取所有 <text> 与 <foreignObject> 内嵌文字。"""
     parent_map = _parent_map(root)
@@ -68,6 +78,8 @@ def extract_texts(root):
     for i, el in enumerate(root.iter()):
         tag = _tag(el.tag)
         if tag == "text":
+            if _in_defs(el, parent_map):
+                continue
             parts = []
             for child in el.iter():
                 if child.tag.split("}")[-1] == "tspan" and child.text:
@@ -85,6 +97,8 @@ def extract_texts(root):
             texts.append({"id": f"t{i}", "text": text, "type": "text",
                           "x": x, "y": y})
         elif tag == "foreignObject":
+            if _in_defs(el, parent_map):
+                continue
             div_text = "".join(el.itertext()).strip()
             if div_text:
                 x = float(el.get("x", "0") or 0)
@@ -106,6 +120,8 @@ def extract_shapes(root):
         tag = _tag(el.tag)
         transforms = _transforms(el, parent_map)
         if tag == "rect":
+            if _in_defs(el, parent_map):
+                continue
             x = float(el.get("x", "0") or 0)
             y = float(el.get("y", "0") or 0)
             w = float(el.get("width", "0") or 0)
@@ -145,6 +161,63 @@ def extract_shapes(root):
                                "cx": cx, "cy": cy,
                                "w": max(xs) - min(xs), "h": max(ys) - min(ys)})
     return shapes
+
+
+def _parse(xml_text):
+    return ET.fromstring(xml_text)
+
+
+def _path_points(d):
+    """解析 path 的 M/L/Q/C 命令,返回坐标点列表(best-effort)。"""
+    pts = []
+    for cmd, nums in re.findall(r"([MmLlCcQq])\s*([-\d.,\s]+)", d):
+        vals = [float(v) for v in nums.replace(",", " ").split() if v]
+        for i in range(0, len(vals) - 1, 2):
+            pts.append((vals[i], vals[i + 1]))
+    return pts
+
+
+def extract_edges(root):
+    parent_map = _parent_map(root)
+    edges = []
+    for i, el in enumerate(root.iter()):
+        tag = _tag(el.tag)
+        if tag not in ("line", "polyline", "path"):
+            continue
+        if _in_defs(el, parent_map):
+            continue
+        transforms = _transforms(el, parent_map)
+        directed = False
+        if el.get("marker-end"):
+            directed = True
+        # draw.io 用 endArrow 属性(可能挂在 style 里,已由转换后的属性承载)
+        if el.get("endArrow") and el.get("endArrow") != "none":
+            directed = True
+        if tag == "line":
+            x1 = float(el.get("x1", "0") or 0)
+            y1 = float(el.get("y1", "0") or 0)
+            x2 = float(el.get("x2", "0") or 0)
+            y2 = float(el.get("y2", "0") or 0)
+            x1, y1 = _apply_transforms(x1, y1, transforms)
+            x2, y2 = _apply_transforms(x2, y2, transforms)
+            edges.append({"id": f"e{i}", "x1": x1, "y1": y1,
+                          "x2": x2, "y2": y2, "directed": directed})
+        elif tag == "polyline":
+            coords = [float(v) for v in
+                      (el.get("points") or "").replace(",", " ").split() if v]
+            if len(coords) >= 4:
+                x1, y1 = _apply_transforms(coords[0], coords[1], transforms)
+                x2, y2 = _apply_transforms(coords[-2], coords[-1], transforms)
+                edges.append({"id": f"e{i}", "x1": x1, "y1": y1,
+                              "x2": x2, "y2": y2, "directed": directed})
+        elif tag == "path":
+            pts = _path_points(el.get("d") or "")
+            if len(pts) >= 2:
+                x1, y1 = _apply_transforms(pts[0][0], pts[0][1], transforms)
+                x2, y2 = _apply_transforms(pts[-1][0], pts[-1][1], transforms)
+                edges.append({"id": f"e{i}", "x1": x1, "y1": y1,
+                              "x2": x2, "y2": y2, "directed": directed})
+    return edges
 
 
 def parse_svg(xml_text):

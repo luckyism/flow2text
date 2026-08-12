@@ -1,0 +1,11 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="400" height="200"
+     xmlns:xlink="http://www.w3.org/1999/xlink">
+  <defs>
+    <marker id="arrow" orient="auto" markerWidth="6" markerHeight="6" refX="5" refY="3">
+      <path d="M0,0 L6,3 L0,6 z"/>
+    </marker>
+  </defs>
+  <line x1="30" y1="30" x2="130" y2="30" marker-end="url(#arrow)"/>
+  <polyline points="30,80 80,80 80,150" fill="none" marker-end="url(#arrow)"/>
+  <line x1="200" y1="30" x2="300" y2="30" stroke="black"/>
+</svg>

@@ -49,5 +49,19 @@ class TestExtractShapes(unittest.TestCase):
         self.assertEqual(dia["cy"], 70)
 
 
+class TestExtractEdges(unittest.TestCase):
+    def test_edges_and_direction(self):
+        edges = svg2struct.extract_edges(
+            svg2struct._parse(load("edges_sample.svg")))
+        self.assertEqual(len(edges), 3)
+        directed = [e for e in edges if e["directed"]]
+        undirected = [e for e in edges if not e["directed"]]
+        self.assertEqual(len(directed), 2)
+        self.assertEqual(len(undirected), 1)
+        # polyline 终点 = 最后一个点
+        poly = next(e for e in edges if e["x1"] == 30 and e["y1"] == 80)
+        self.assertEqual((poly["x2"], poly["y2"]), (80, 150))
+
+
 if __name__ == "__main__":
     unittest.main()
