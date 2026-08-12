@@ -31,9 +31,8 @@ class TestExtractTexts(unittest.TestCase):
 
 class TestExtractShapes(unittest.TestCase):
     def test_shape_types_and_centers(self):
-        root = svg2struct.parse_svg(load("shapes_sample.svg"))
-        shapes = {s["id"]: s for s in root["nodes"]
-                  if s["type"] != "text"}
+        shapes = {s["id"]: s for s in svg2struct.extract_shapes(
+            svg2struct._parse(load("shapes_sample.svg")))}
         types = sorted(s["type"] for s in shapes.values())
         self.assertEqual(types, ["diamond", "ellipse", "rect", "rect"])
         rect1 = next(s for s in shapes.values() if s["cx"] == 80 and s["cy"] == 50)
@@ -61,6 +60,22 @@ class TestExtractEdges(unittest.TestCase):
         # polyline 终点 = 最后一个点
         poly = next(e for e in edges if e["x1"] == 30 and e["y1"] == 80)
         self.assertEqual((poly["x2"], poly["y2"]), (80, 150))
+
+
+class TestAssembleAndMatch(unittest.TestCase):
+    def test_full_small_flow(self):
+        root = svg2struct.parse_svg(load("small_flow.svg"))
+        nodes = root["nodes"]
+        self.assertEqual(len(nodes), 3)  # 开始 / 处理 / 通过?(文字已并入形状)
+        start = next(n for n in nodes if n["text"] == "开始")
+        self.assertEqual(start["type"], "ellipse")
+        judge = next(n for n in nodes if n["text"] == "通过?")
+        self.assertEqual(judge["type"], "diamond")
+        edges = root["edges"]
+        self.assertEqual(len(edges), 2)
+        self.assertEqual(edges[0]["from"], start["id"])
+        by_from = {e["from"]: e for e in edges}
+        self.assertEqual(by_from[start["id"]]["to"], "n1")
 
 
 if __name__ == "__main__":

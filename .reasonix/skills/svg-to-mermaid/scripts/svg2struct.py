@@ -220,9 +220,88 @@ def extract_edges(root):
     return edges
 
 
+def _in_box(x, y, cx, cy, w, h, tol=8.0):
+    half_w, half_h = w / 2.0 + tol, h / 2.0 + tol
+    return abs(x - cx) <= half_w and abs(y - cy) <= half_h
+
+
+def assemble_nodes(texts, shapes):
+    nodes = []
+    for shape in shapes:
+        node = {"id": f"n{len(nodes)}", "text": "", "type": shape["type"],
+                "cx": shape["cx"], "cy": shape["cy"],
+                "w": shape["w"], "h": shape["h"]}
+        nodes.append(node)
+    for t in texts:
+        owner = None
+        for node in nodes:
+            if "w" not in node:
+                continue  # 独立 text 节点无包围盒,不做归属
+            if _in_box(t["x"], t["y"], node["cx"], node["cy"],
+                       node["w"], node["h"]):
+                owner = node
+                break
+        if owner is not None:
+            if not owner["text"]:
+                owner["text"] = t["text"]
+            else:
+                owner["text"] += " " + t["text"]
+        else:
+            nodes.append({"id": f"n{len(nodes)}", "text": t["text"],
+                          "type": "text", "x": t["x"], "y": t["y"],
+                          "cx": t["x"], "cy": t["y"]})
+    # 移除仅用于包围盒判断的 w/h
+    for node in nodes:
+        node.pop("w", None)
+        node.pop("h", None)
+    return nodes
+
+
+def _nearest_node(x, y, nodes):
+    best, best_d = None, float("inf")
+    for node in nodes:
+        d = (node["cx"] - x) ** 2 + (node["cy"] - y) ** 2
+        if d < best_d:
+            best, best_d = node, d
+    return best
+
+
+def _swimlanes(containers, texts):
+    """从容器矩形提取泳道信息,label 取落入容器内的首个文字。"""
+    lanes = []
+    for c in containers:
+        label = ""
+        for t in texts:
+            if _in_box(t["x"], t["y"], c["cx"], c["cy"], c["w"], c["h"]):
+                if not label:
+                    label = t["text"]
+        lanes.append({"id": c["id"], "label": label,
+                      "cx": c["cx"], "cy": c["cy"],
+                      "w": c["w"], "h": c["h"]})
+    return lanes
+
+
+def match_edges(nodes, edges):
+    result = []
+    for e in edges:
+        src = _nearest_node(e["x1"], e["y1"], nodes)
+        dst = _nearest_node(e["x2"], e["y2"], nodes)
+        if src is None or dst is None or src["id"] == dst["id"]:
+            continue
+        result.append({"from": src["id"], "to": dst["id"], "label": ""})
+    return result
+
+
 def parse_svg(xml_text):
-    root = ET.fromstring(xml_text)
-    return {"nodes": extract_texts(root) + extract_shapes(root), "edges": []}
+    root = _parse(xml_text)
+    texts = extract_texts(root)
+    shapes = extract_shapes(root)
+    containers = [s for s in shapes if s["type"] == "container"]
+    flow_shapes = [s for s in shapes if s["type"] != "container"]
+    swimlanes = _swimlanes(containers, texts)
+    nodes = assemble_nodes(texts, flow_shapes)
+    edges = match_edges(nodes, extract_edges(root))
+    return {"nodes": nodes, "edges": edges, "swimlanes": swimlanes}
 
 
 def main():
