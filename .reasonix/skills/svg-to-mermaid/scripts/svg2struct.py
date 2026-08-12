@@ -260,6 +260,8 @@ def assemble_nodes(texts, shapes):
 def _nearest_node(x, y, nodes):
     best, best_d = None, float("inf")
     for node in nodes:
+        if node.get("type") == "text":
+            continue  # 独立文字(连线标签)不作边端点
         d = (node["cx"] - x) ** 2 + (node["cy"] - y) ** 2
         if d < best_d:
             best, best_d = node, d
@@ -281,14 +283,35 @@ def _swimlanes(containers, texts):
     return lanes
 
 
-def match_edges(nodes, edges):
+def _free_texts(texts, flow_shapes, containers):
+    """返回不落入任何流程形状或容器的文字(候选连线标签)。"""
+    boxes = flow_shapes + containers
+
+    def occupied(t):
+        return any(_in_box(t["x"], t["y"], s["cx"], s["cy"], s["w"], s["h"])
+                   for s in boxes)
+
+    return [t for t in texts if not occupied(t)]
+
+
+def match_edges(nodes, edges, free_texts=None):
     result = []
     for e in edges:
         src = _nearest_node(e["x1"], e["y1"], nodes)
         dst = _nearest_node(e["x2"], e["y2"], nodes)
         if src is None or dst is None or src["id"] == dst["id"]:
             continue
-        result.append({"from": src["id"], "to": dst["id"], "label": ""})
+        label = ""
+        if free_texts:
+            mx, my = (e["x1"] + e["x2"]) / 2.0, (e["y1"] + e["y2"]) / 2.0
+            best_t, best_d = None, float("inf")
+            for t in free_texts:
+                d = (t["x"] - mx) ** 2 + (t["y"] - my) ** 2
+                if d < best_d:
+                    best_t, best_d = t, d
+            if best_t is not None and best_d <= 30.0 ** 2:
+                label = best_t["text"]
+        result.append({"from": src["id"], "to": dst["id"], "label": label})
     return result
 
 
@@ -300,7 +323,8 @@ def parse_svg(xml_text):
     flow_shapes = [s for s in shapes if s["type"] != "container"]
     swimlanes = _swimlanes(containers, texts)
     nodes = assemble_nodes(texts, flow_shapes)
-    edges = match_edges(nodes, extract_edges(root))
+    free = _free_texts(texts, flow_shapes, containers)
+    edges = match_edges(nodes, extract_edges(root), free_texts=free)
     return {"nodes": nodes, "edges": edges, "swimlanes": swimlanes}
 
 

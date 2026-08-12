@@ -78,5 +78,36 @@ class TestAssembleAndMatch(unittest.TestCase):
         self.assertEqual(by_from[start["id"]]["to"], "n1")
 
 
+class TestIntegration(unittest.TestCase):
+    def test_drawio_sample(self):
+        root = svg2struct.parse_svg(load("drawio_sample.svg"))
+        texts = [n["text"] for n in root["nodes"]]
+        for expect in ("开始", "检查", "合法?"):
+            self.assertIn(expect, texts)
+        self.assertEqual(len(root["edges"]), 2)
+        self.assertEqual(root["edges"][1]["label"], "是")
+
+    def test_handwritten_loop(self):
+        root = svg2struct.parse_svg(load("handwritten_loop.svg"))
+        texts = [n["text"] for n in root["nodes"]]
+        for expect in ("开始", "任务", "完成?", "收尾"):
+            self.assertIn(expect, texts)
+        self.assertEqual(len(root["edges"]), 4)
+        # 循环回路:从"完成?"回到"任务"
+        to_task = [e for e in root["edges"] if e["to"] == "n1"]
+        self.assertTrue(any(e["from"] == "n2" for e in to_task))
+
+    def test_swimlane(self):
+        root = svg2struct.parse_svg(load("swimlane.svg"))
+        texts = [n["text"] for n in root["nodes"]]
+        for expect in ("接收请求", "校验", "返回结果", "接收", "处理", "输出"):
+            self.assertIn(expect, texts)
+        self.assertEqual(len(root["swimlanes"]), 3)
+        labels = [s["label"] for s in root["swimlanes"]]
+        for expect in ("接收", "处理", "输出"):
+            self.assertIn(expect, labels)
+        self.assertEqual(len(root["edges"]), 2)
+
+
 if __name__ == "__main__":
     unittest.main()
